@@ -1,6 +1,6 @@
 ## This is the official PSU Chem-E Car repository  
 The intended purpose is to document Arduino code from past years  
-Email me at nathanedummer@gmail.com with your github username to request collaborator access  
+Please email [checar@psuaiche.com](checar@psuaiche.com) with your github username to request collaborator access  
 This is so that you can upload files!!
 
 All files can easily be copied and uploaded to Arduino  

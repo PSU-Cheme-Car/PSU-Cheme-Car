@@ -58,6 +58,16 @@ const int KNEE_UP      = 55;   // leg lifted for clearance (smaller = higher, tu
 // --- Timing ---
 unsigned int phaseDuration = 200; // ms per phase; smaller = faster gait
 
+// --- Stop trigger (photoresistor / LDR) ---
+// Wiring: 5V -> LDR -> A0 -> fixed resistor (~10k) -> GND
+// With this arrangement, MORE light = HIGHER analogRead() value.
+// (If you wire the LDR and resistor the other way around, the readings
+//  invert, and you'd need to flip the comparison in checkStopCondition().)
+const uint8_t      LDR_PIN             = A0;
+const int          LIGHT_THRESHOLD     = 600;  // Stop car when reading rises above this. Calibrate!
+const unsigned int LDR_SAMPLE_MS       = 50;   // how often to read the sensor
+const uint8_t      LDR_CONFIRM_SAMPLES = 5;    // consecutive readings above threshold required to stop
+
 // ---------------------------------------------------------------
 // INTERNAL STATE
 // ---------------------------------------------------------------
@@ -76,6 +86,7 @@ const uint8_t groupB[3] = { RF, LM, RB };
 uint8_t walkPhase = 0;
 unsigned long phaseStartTime = 0;
 bool walkingEnabled = false;
+bool stopped = false; //locked true once stop condition met
 
 // ---------------------------------------------------------------
 // LOW-LEVEL HELPERS
@@ -109,6 +120,8 @@ void setup() {
   }
 
   delay(500); // let servos settle before moving
+
+  pinMode(LDR_PIN, INPUT);
 
   phaseStartTime = millis();
   walkingEnabled = true; // set false to freeze in place
@@ -173,10 +186,55 @@ void updateWalk() {
 }
 
 // ---------------------------------------------------------------
+// STOP FUNCTIONS
+// ---------------------------------------------------------------
+ 
+// Permanently ends the walk cycle. Latched: once called, updateWalk()
+// does nothing and the robot stays put until the board is reset.
+void stopWalking() {
+  walkingEnabled = false;
+  stopped = true;
+ 
+  // Plant every foot so the robot stands stably wherever it ended up.
+  // Hips are left where they are to avoid extra motion (and drift)
+  // after the stop. To also return the legs to a neutral stance,
+  // add setHip(i, 0); inside this loop.
+  for (uint8_t i = 0; i < NUM_LEGS; i++) {
+    setKnee(i, false);
+  }
+}
+ 
+// Non-blocking check; call every loop(). Samples the photoresistor at
+// LDR_SAMPLE_MS intervals and triggers stopWalking() once the reading
+// has stayed above LIGHT_THRESHOLD for LDR_CONFIRM_SAMPLES samples in a row.
+void checkStopCondition() {
+  if (stopped) return;
+ 
+  static unsigned long lastSampleTime = 0;
+  static uint8_t aboveCount = 0;
+ 
+  unsigned long now = millis();
+  if (now - lastSampleTime < LDR_SAMPLE_MS) return;
+  lastSampleTime = now;
+ 
+  int reading = analogRead(LDR_PIN);
+ 
+  if (reading > LIGHT_THRESHOLD) {
+    aboveCount++;
+    if (aboveCount >= LDR_CONFIRM_SAMPLES) {
+      stopWalking();
+    }
+  } else {
+    aboveCount = 0; // streak broken; start counting again
+  }
+}
+
+// ---------------------------------------------------------------
 // MAIN LOOP
 // ---------------------------------------------------------------
 
 void loop() {
+  checkStopCondition();
   updateWalk();
 
   // Add other non-blocking logic here (sensors, comms, obstacle

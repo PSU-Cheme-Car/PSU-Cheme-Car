@@ -62,9 +62,10 @@ unsigned int phaseDuration = 200; // ms per phase; smaller = faster gait
 // Wiring: 5V -> LDR -> A0 -> fixed resistor (~10k) -> GND
 // With this arrangement, MORE light = HIGHER analogRead() value.
 // (If you wire the LDR and resistor the other way around, the readings
-//  invert, and you'd need to flip the comparison in checkStopCondition().)
+//  invert, and you'd need to flip the comparison Walk().)
 const uint8_t      LDR_PIN             = A0;
-const int          LIGHT_THRESHOLD     = 600;  // Stop car when reading rises above this. Calibrate!
+const int          LIGHT_THRESHOLD     = 200;  // Stop car when reading drops below this.
+const int          START_THRESHOLD     = 800;  // Start walking when reading rises above this.
 const unsigned int LDR_SAMPLE_MS       = 50;   // how often to read the sensor
 const uint8_t      LDR_CONFIRM_SAMPLES = 5;    // consecutive readings above threshold required to stop
 
@@ -86,6 +87,7 @@ const uint8_t groupB[3] = { RF, LM, RB };
 uint8_t walkPhase = 0;
 unsigned long phaseStartTime = 0;
 bool walkingEnabled = false;
+bool started = false; //locked true once start condition met
 bool stopped = false; //locked true once stop condition met
 
 // ---------------------------------------------------------------
@@ -207,7 +209,7 @@ void stopWalking() {
 // Non-blocking check; call every loop(). Samples the photoresistor at
 // LDR_SAMPLE_MS intervals and triggers stopWalking() once the reading
 // has stayed above LIGHT_THRESHOLD for LDR_CONFIRM_SAMPLES samples in a row.
-void checkStopCondition() {
+void checkWalkCondition() {
   if (stopped) return;
  
   static unsigned long lastSampleTime = 0;
@@ -218,14 +220,28 @@ void checkStopCondition() {
   lastSampleTime = now;
  
   int reading = analogRead(LDR_PIN);
- 
-  if (reading > LIGHT_THRESHOLD) {
-    aboveCount++;
-    if (aboveCount >= LDR_CONFIRM_SAMPLES) {
-      stopWalking();
+ if(!started){
+    if (reading > START_THRESHOLD) {
+      aboveCount++;
+      if (aboveCount >= LDR_CONFIRM_SAMPLES) {
+        walkingEnabled = true;
+        started = true;
+      }
+    } 
+    else {
+      aboveCount = 0; // streak broken; start counting again
     }
-  } else {
-    aboveCount = 0; // streak broken; start counting again
+  }
+  else{
+    if (reading < LIGHT_THRESHOLD) {
+      aboveCount++;
+      if (aboveCount >= LDR_CONFIRM_SAMPLES) {
+        stopWalking();
+      }
+    } 
+    else {
+      aboveCount = 0; // streak broken; start counting again
+    }
   }
 }
 
@@ -233,8 +249,9 @@ void checkStopCondition() {
 // MAIN LOOP
 // ---------------------------------------------------------------
 
+
 void loop() {
-  checkStopCondition();
+  checkWalkCondition();
   updateWalk();
 
   // Add other non-blocking logic here (sensors, comms, obstacle

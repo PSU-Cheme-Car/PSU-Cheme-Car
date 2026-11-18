@@ -110,6 +110,7 @@ void setKnee(uint8_t leg, bool up) {
 // ---------------------------------------------------------------
 
 void setup() {
+  Serial.begin(115200);
   for (uint8_t i = 0; i < NUM_LEGS; i++) {
     hipServo[i].attach(hipPin[i]);
     kneeServo[i].attach(kneePin[i]);
@@ -220,6 +221,8 @@ void checkWalkCondition() {
   lastSampleTime = now;
  
   int reading = analogRead(LDR_PIN);
+  Serial.print("LDR reading: ");
+  Serial.println(reading);
  if(!started){
     if (reading > START_THRESHOLD) {
       aboveCount++;
